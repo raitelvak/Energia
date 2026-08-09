@@ -13,3 +13,9 @@ Kasutamine:
 4. iPhone/Safari: Share -> Add to Home Screen.
 
 NB! PWA installimine vajab tavaliselt HTTPS aadressi. Kohalikult failina avades võib leht töötada, kuid service worker ja installimine ei pruugi toimida.
+
+
+## Parandused selles versioonis
+- API päringutele lisatud CORS fallback.
+- Lisa äpp nupp avab juhise, kui brauser automaatset PWA akent ei paku.
+- GitHub Pages jaoks sobiv struktuur: failid peavad olema repository juurkaustas.
