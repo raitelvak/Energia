@@ -20,3 +20,10 @@ GitHub Pages:
 Failid peavad olema repository juurkaustas: index.html, manifest.webmanifest, sw.js, README.md ja icons/.
 
 Pärast üleslaadimist tee Ctrl+F5 või kustuta mobiilis saidi cache, sest service worker võib vana versiooni hoida.
+
+
+## Uuendus v2
+- Graafikul kuvatakse tooltip, kui hiire või sõrmega andmepunktile liikuda.
+- Kui tänased andmed on localStorage'is olemas, ei tee leht avamisel uut API päringut.
+- API päring tehakse ainult siis, kui tänane cache puudub või vajutad ↻ sunduuendust.
+- Gaasi päringul on lühike timeout, et aeglane või poolik gaasi endpoint ei aeglustaks lehte.
