@@ -1,5 +1,5 @@
 {
-  "name": "Energia EE - päevased börsihinnad",
+  "name": "Energia EE - hind koos tasudega",
   "short_name": "Energia EE",
   "start_url": "./index.html",
   "scope": "./",
