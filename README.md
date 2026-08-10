@@ -1,29 +1,20 @@
-# Energia EE Daily PWA + tasud
+# Energia EE PWA - TTF ja Elenger gaasihind
 
 Uuendused:
-- Näitab börsihinda s/kWh.
-- Näitab hinnangulist lõpphinda koos tasudega.
-- Tasude seadistuses saab muuta võrgutasu ja müüja marginaali.
-- Graafikut saab vaadata kas börsihinna või lõpphinnana.
-- Andmete päring toimub 1x päevas ja tulemus salvestatakse brauserisse.
+- Gaasi kaart ei küsi enam Eleringi gaasi API-st andmeid.
+- Kuvatakse eraldi TTF hind ja Elengeri kuupõhine paindliku paketi hind.
+- Gaasihinnad on käsitsi muudetavad ja salvestatakse brauserisse.
+- Elektrihinna graafikul on tooltip hiire/sõrmega andmepunktile liikudes.
+- Kui tänased elektriandmed on localStorage'is olemas, ei tee leht avamisel uut API päringut.
 
-Vaikimisi tasud:
-- Võrgutasu: 6,000 s/kWh, näidisväärtus, muuda oma paketi järgi.
-- Müüja marginaal: 0,200 s/kWh.
-- Taastuvenergia tasu: 0,840 s/kWh.
-- Varustuskindluse tasu: 0,758 s/kWh.
-- Tasakaalustamisvõimsuse tasu: 0,373 s/kWh.
-- Elektriaktsiis: 0,100 s/kWh.
-- Käibemaks: 24%.
+Vaikimisi gaasihinnad:
+- TTF: 53,60 €/MWh
+- Elenger: 0,680 €/m³, august 2026
+- Teisendus: 10,55 kWh/m³
+
+Kui Elengeri järgmise kuu hind on avaldatud, muuda see lehel ja vajuta “Salvesta gaasihinnad”.
 
 GitHub Pages:
 Failid peavad olema repository juurkaustas: index.html, manifest.webmanifest, sw.js, README.md ja icons/.
 
 Pärast üleslaadimist tee Ctrl+F5 või kustuta mobiilis saidi cache, sest service worker võib vana versiooni hoida.
-
-
-## Uuendus v2
-- Graafikul kuvatakse tooltip, kui hiire või sõrmega andmepunktile liikuda.
-- Kui tänased andmed on localStorage'is olemas, ei tee leht avamisel uut API päringut.
-- API päring tehakse ainult siis, kui tänane cache puudub või vajutad ↻ sunduuendust.
-- Gaasi päringul on lühike timeout, et aeglane või poolik gaasi endpoint ei aeglustaks lehte.
