@@ -1,20 +1,15 @@
-# Energia EE PWA - TTF ja Elenger gaasihind
+# Energia EE v3
 
 Uuendused:
-- Gaasi kaart ei küsi enam Eleringi gaasi API-st andmeid.
-- Kuvatakse eraldi TTF hind ja Elengeri kuupõhine paindliku paketi hind.
-- Gaasihinnad on käsitsi muudetavad ja salvestatakse brauserisse.
-- Elektrihinna graafikul on tooltip hiire/sõrmega andmepunktile liikudes.
-- Kui tänased elektriandmed on localStorage'is olemas, ei tee leht avamisel uut API päringut.
-
-Vaikimisi gaasihinnad:
-- TTF: 53,60 €/MWh
-- Elenger: 0,680 €/m³, august 2026
-- Teisendus: 10,55 kWh/m³
-
-Kui Elengeri järgmise kuu hind on avaldatud, muuda see lehel ja vajuta “Salvesta gaasihinnad”.
+- Elektrihinna graafik on tõstetud lehe algusesse.
+- Lõpphinna graafikul on punane võrdlusjoon 20,8 s/kWh.
+- Graafiku tooltip töötab hiire ja mobiilis sõrmega.
+- Mobiilivaates on graafikutel suurem font ja kõrgem kuva.
+- Lisatud TTF gaasihind ja Elengeri kuupõhine hind.
+- Gaasi graafik on kuupõhine, mitte päevapõhine.
+- Elektriandmed salvestatakse tänaseks päevaks brauserisse ja API päringut ei tehta iga avamisega.
 
 GitHub Pages:
-Failid peavad olema repository juurkaustas: index.html, manifest.webmanifest, sw.js, README.md ja icons/.
+Laadi repository juurkausta üles: index.html, manifest.webmanifest, sw.js, README.md ja icons/.
 
-Pärast üleslaadimist tee Ctrl+F5 või kustuta mobiilis saidi cache, sest service worker võib vana versiooni hoida.
+Pärast üleslaadimist tee Ctrl+F5 või kustuta mobiilis saidi cache, sest PWA service worker võib vana versiooni hoida.
