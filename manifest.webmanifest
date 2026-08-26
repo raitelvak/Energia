@@ -1,11 +1,11 @@
 {
-  "name": "Energia EE - elekter ja gaas",
+  "name": "Energia EE",
   "short_name": "Energia EE",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#070a13",
-  "theme_color": "#070a13",
+  "background_color": "#080d19",
+  "theme_color": "#080d19",
   "lang": "et-EE",
   "icons": [
     {
