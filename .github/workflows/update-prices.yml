@@ -30,6 +30,7 @@ jobs:
 
           curl --fail --location --retry 3 \
             -H "Accept: application/json" \
+            -H "User-Agent: EnergiaEE-GitHubActions/1.0" \
             "$URL" \
             -o data/raw-prices.json
 
@@ -38,11 +39,11 @@ jobs:
           from datetime import datetime, timezone
           from pathlib import Path
 
-          raw = json.loads(
-              Path("data/raw-prices.json").read_text(
-                  encoding="utf-8"
-              )
-          )
+          source = Path("data/raw-prices.json")
+          raw = json.loads(source.read_text(encoding="utf-8"))
+
+          if not isinstance(raw, dict):
+              raw = {"data": raw}
 
           raw["updated_at"] = datetime.now(
               timezone.utc
@@ -52,6 +53,8 @@ jobs:
               json.dumps(raw, ensure_ascii=False),
               encoding="utf-8"
           )
+
+          source.unlink()
           PYCODE
 
       - name: Commit prices
@@ -62,8 +65,10 @@ jobs:
 
           git add data/prices.json
 
-          git diff --cached --quiet && exit 0
+          if git diff --cached --quiet; then
+            echo "Price data did not change"
+            exit 0
+          fi
 
           git commit -m "Update electricity prices"
           git push
-``
