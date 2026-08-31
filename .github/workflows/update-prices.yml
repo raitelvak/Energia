@@ -1,0 +1,69 @@
+name: Update electricity prices
+
+on:
+  schedule:
+    - cron: "15 13 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-prices:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download today and tomorrow prices
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TODAY=$(TZ=Europe/Tallinn date +%F)
+          TOMORROW=$(TZ=Europe/Tallinn date -d tomorrow +%F)
+
+          mkdir -p data
+
+          URL="https://nordapi.ee/api/v1/elering/prices?start=${TODAY}&end=${TOMORROW}"
+
+          curl --fail --location --retry 3 \
+            -H "Accept: application/json" \
+            "$URL" \
+            -o data/raw-prices.json
+
+          python3 - <<'PYCODE'
+          import json
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          raw = json.loads(
+              Path("data/raw-prices.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+
+          raw["updated_at"] = datetime.now(
+              timezone.utc
+          ).isoformat()
+
+          Path("data/prices.json").write_text(
+              json.dumps(raw, ensure_ascii=False),
+              encoding="utf-8"
+          )
+          PYCODE
+
+      - name: Commit prices
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add data/prices.json
+
+          git diff --cached --quiet && exit 0
+
+          git commit -m "Update electricity prices"
+          git push
+``
