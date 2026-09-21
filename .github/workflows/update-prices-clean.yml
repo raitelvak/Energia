@@ -1,1 +1,9 @@
+name: Update electricity prices clean
 
+on:
+  schedule:
+    - cron: "15 13 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
