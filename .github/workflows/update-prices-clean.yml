@@ -1,9 +1,9 @@
 name: Update electricity prices clean
 
 on:
-  workflow_dispatch:
   schedule:
     - cron: "15 13 * * *"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -16,34 +16,41 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Download electricity prices
+      - name: Download and normalize electricity prices
         shell: bash
         run: |
           set -euo pipefail
 
-          TODAY=$(TZ=Europe/Tallinn date +%F)
+          YESTERDAY=$(TZ=Europe/Tallinn date -d "yesterday" +%F)
           DAY_AFTER_TOMORROW=$(TZ=Europe/Tallinn date -d "+2 days" +%F)
 
           mkdir -p data
 
-          URL="https://nordapi.ee/api/v1/elering/prices?start=${TODAY}&end=${DAY_AFTER_TOMORROW}"
+          URL="https://nordapi.ee/api/v1/elering/prices?start=${YESTERDAY}&end=${DAY_AFTER_TOMORROW}"
 
           curl --fail --location --retry 3 \
             --connect-timeout 20 \
             --max-time 90 \
             -H "Accept: application/json" \
-            -H "User-Agent: EnergiaEE-GitHubActions/3.0" \
+            -H "User-Agent: EnergiaEE-GitHubActions/4.0" \
             "$URL" \
             -o data/raw-prices.json
 
           python3 - <<'PYCODE'
           import json
-          from datetime import datetime, timezone
+          from datetime import datetime, timedelta, timezone
           from pathlib import Path
           from zoneinfo import ZoneInfo
 
-          source = Path("data/raw-prices.json")
-          raw = json.loads(source.read_text(encoding="utf-8"))
+          tallinn = ZoneInfo("Europe/Tallinn")
+          today = datetime.now(tallinn).date()
+          tomorrow = today + timedelta(days=1)
+
+          raw = json.loads(
+              Path("data/raw-prices.json").read_text(
+                  encoding="utf-8"
+              )
+          )
 
           node = raw
 
@@ -53,46 +60,50 @@ jobs:
                   and "ee" in node
                   and isinstance(node["ee"], list)
               ):
-                  prices = node["ee"]
+                  source_rows = node["ee"]
                   break
 
               if isinstance(node, dict) and "data" in node:
                   node = node["data"]
               else:
-                  prices = []
+                  source_rows = []
                   break
           else:
-              prices = []
+              source_rows = []
 
-          tallinn = ZoneInfo("Europe/Tallinn")
-          today = datetime.now(tallinn).date()
-          tomorrow = today.fromordinal(today.toordinal() + 1)
+          unique_rows = {}
+
+          for row in source_rows:
+              timestamp = int(row["timestamp"])
+              unique_rows[timestamp] = {
+                  "timestamp": timestamp,
+                  "price": float(row["price"])
+              }
 
           today_prices = []
           tomorrow_prices = []
 
-          for item in prices:
-              timestamp = int(item["timestamp"])
-              price = float(item["price"])
-
-              local_date = datetime.fromtimestamp(
-                  timestamp,
+          for row in sorted(
+              unique_rows.values(),
+              key=lambda item: item["timestamp"]
+          ):
+              local_datetime = datetime.fromtimestamp(
+                  row["timestamp"],
                   timezone.utc
-              ).astimezone(tallinn).date()
+              ).astimezone(tallinn)
 
-              output_item = {
-                  "timestamp": timestamp,
-                  "price": price,
-                  "delivery_date": local_date.isoformat()
-              }
+              delivery_date = local_datetime.date()
+              row["delivery_date"] = delivery_date.isoformat()
 
-              if local_date == today:
-                  today_prices.append(output_item)
-              elif local_date == tomorrow:
-                  tomorrow_prices.append(output_item)
+              if delivery_date == today:
+                  today_prices.append(row)
+              elif delivery_date == tomorrow:
+                  tomorrow_prices.append(row)
 
           output = {
-              "updated_at": datetime.now(timezone.utc).isoformat(),
+              "updated_at": datetime.now(
+                  timezone.utc
+              ).isoformat(),
               "today": today.isoformat(),
               "tomorrow": tomorrow.isoformat(),
               "today_prices": today_prices,
@@ -101,20 +112,28 @@ jobs:
               "tomorrow_count": len(tomorrow_prices)
           }
 
-          Path("data/prices.json").write_text(
-              json.dumps(output, ensure_ascii=False),
-              encoding="utf-8"
+          print(
+              f"Today: {len(today_prices)} points"
           )
-
-          source.unlink()
-
-          print("Today:", len(today_prices), "points")
-          print("Tomorrow:", len(tomorrow_prices), "points")
+          print(
+              f"Tomorrow: {len(tomorrow_prices)} points"
+          )
 
           if len(today_prices) < 92:
               raise RuntimeError(
-                  f"Today contains only {len(today_prices)} points"
+                  f"Today contains only "
+                  f"{len(today_prices)} points"
               )
+
+          Path("data/prices.json").write_text(
+              json.dumps(
+                  output,
+                  ensure_ascii=False
+              ),
+              encoding="utf-8"
+          )
+
+          Path("data/raw-prices.json").unlink()
           PYCODE
 
       - name: Commit electricity prices
@@ -126,7 +145,7 @@ jobs:
           git add data/prices.json
 
           if git diff --cached --quiet; then
-            echo "No price changes"
+            echo "Electricity price data did not change"
             exit 0
           fi
 
