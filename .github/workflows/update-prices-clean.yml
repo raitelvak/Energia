@@ -1,9 +1,134 @@
 name: Update electricity prices clean
 
 on:
+  workflow_dispatch:
   schedule:
     - cron: "15 13 * * *"
-  workflow_dispatch:
 
 permissions:
   contents: write
+
+jobs:
+  update-prices:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download electricity prices
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TODAY=$(TZ=Europe/Tallinn date +%F)
+          DAY_AFTER_TOMORROW=$(TZ=Europe/Tallinn date -d "+2 days" +%F)
+
+          mkdir -p data
+
+          URL="https://nordapi.ee/api/v1/elering/prices?start=${TODAY}&end=${DAY_AFTER_TOMORROW}"
+
+          curl --fail --location --retry 3 \
+            --connect-timeout 20 \
+            --max-time 90 \
+            -H "Accept: application/json" \
+            -H "User-Agent: EnergiaEE-GitHubActions/3.0" \
+            "$URL" \
+            -o data/raw-prices.json
+
+          python3 - <<'PYCODE'
+          import json
+          from datetime import datetime, timezone
+          from pathlib import Path
+          from zoneinfo import ZoneInfo
+
+          source = Path("data/raw-prices.json")
+          raw = json.loads(source.read_text(encoding="utf-8"))
+
+          node = raw
+
+          for _ in range(5):
+              if (
+                  isinstance(node, dict)
+                  and "ee" in node
+                  and isinstance(node["ee"], list)
+              ):
+                  prices = node["ee"]
+                  break
+
+              if isinstance(node, dict) and "data" in node:
+                  node = node["data"]
+              else:
+                  prices = []
+                  break
+          else:
+              prices = []
+
+          tallinn = ZoneInfo("Europe/Tallinn")
+          today = datetime.now(tallinn).date()
+          tomorrow = today.fromordinal(today.toordinal() + 1)
+
+          today_prices = []
+          tomorrow_prices = []
+
+          for item in prices:
+              timestamp = int(item["timestamp"])
+              price = float(item["price"])
+
+              local_date = datetime.fromtimestamp(
+                  timestamp,
+                  timezone.utc
+              ).astimezone(tallinn).date()
+
+              output_item = {
+                  "timestamp": timestamp,
+                  "price": price,
+                  "delivery_date": local_date.isoformat()
+              }
+
+              if local_date == today:
+                  today_prices.append(output_item)
+              elif local_date == tomorrow:
+                  tomorrow_prices.append(output_item)
+
+          output = {
+              "updated_at": datetime.now(timezone.utc).isoformat(),
+              "today": today.isoformat(),
+              "tomorrow": tomorrow.isoformat(),
+              "today_prices": today_prices,
+              "tomorrow_prices": tomorrow_prices,
+              "today_count": len(today_prices),
+              "tomorrow_count": len(tomorrow_prices)
+          }
+
+          Path("data/prices.json").write_text(
+              json.dumps(output, ensure_ascii=False),
+              encoding="utf-8"
+          )
+
+          source.unlink()
+
+          print("Today:", len(today_prices), "points")
+          print("Tomorrow:", len(tomorrow_prices), "points")
+
+          if len(today_prices) < 92:
+              raise RuntimeError(
+                  f"Today contains only {len(today_prices)} points"
+              )
+          PYCODE
+
+      - name: Commit electricity prices
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add data/prices.json
+
+          if git diff --cached --quiet; then
+            echo "No price changes"
+            exit 0
+          fi
+
+          git commit -m "Update normalized electricity prices"
+          git push
