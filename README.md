@@ -1,1 +1,0 @@
-Laadi kõik failid repository juurkausta. Workflow küsib vahemiku tänasest ülehomseni, et saada tänane ja homne täispäev. Pärast uploadi käivita Actions > Update electricity prices > Run workflow, oota Pages deploy ning vajuta äpis Uuenda.
