@@ -1,1 +1,0 @@
-Uus puhas lahendus. Eemalda vana update-prices.yml või keela vana workflow. Laadi failid üles, luba Actions write permissions, käivita Update electricity prices clean ning oota Pages deploy.
