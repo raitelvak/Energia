@@ -1,1 +1,1 @@
-Täielik Energia EE pakett. Laadi failid juurkausta, loo .github/workflows/update-prices-clean.yml Actions kaudu, luba write permissions, käivita workflow ja oota Pages deploy.
+Täielik automaatne elektri- ja gaasihinna pakett. Kasuta ainult workflow faili update-energy-prices.yml. Keela või kustuta vanad hinnaworkflowd.
