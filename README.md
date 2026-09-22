@@ -1,0 +1,1 @@
+Täielik Energia EE pakett. Laadi failid juurkausta, loo .github/workflows/update-prices-clean.yml Actions kaudu, luba write permissions, käivita workflow ja oota Pages deploy.
