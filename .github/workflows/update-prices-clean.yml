@@ -1,1 +1,71 @@
+name: Update electricity prices clean
 
+on:
+  schedule:
+    - cron: "15 12 * * *"
+    - cron: "15 13 * * *"
+    - cron: "15 14 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-prices:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Download and normalize electricity prices
+        shell: bash
+        run: |
+          set -euo pipefail
+          YESTERDAY=$(TZ=Europe/Tallinn date -d "yesterday" +%F)
+          DAY_AFTER_TOMORROW=$(TZ=Europe/Tallinn date -d "+2 days" +%F)
+          mkdir -p data
+          URL="https://nordapi.ee/api/v1/elering/prices?start=${YESTERDAY}&end=${DAY_AFTER_TOMORROW}"
+          curl --fail --location --retry 3 --connect-timeout 20 --max-time 90 \
+            -H "Accept: application/json" \
+            -H "User-Agent: EnergiaEE-GitHubActions/5.0" \
+            "$URL" -o data/raw-prices.json
+          python3 - <<'PYCODE'
+          import json
+          from datetime import datetime, timedelta, timezone
+          from pathlib import Path
+          from zoneinfo import ZoneInfo
+          tallinn=ZoneInfo("Europe/Tallinn")
+          today=datetime.now(tallinn).date()
+          tomorrow=today+timedelta(days=1)
+          raw=json.loads(Path("data/raw-prices.json").read_text(encoding="utf-8"))
+          node=raw
+          source=[]
+          for _ in range(6):
+              if isinstance(node,dict) and isinstance(node.get("ee"),list):
+                  source=node["ee"]; break
+              if isinstance(node,dict) and "data" in node: node=node["data"]
+              else: break
+          unique={int(r["timestamp"]):{"timestamp":int(r["timestamp"]),"price":float(r["price"])} for r in source}
+          today_rows=[]; tomorrow_rows=[]
+          for row in sorted(unique.values(),key=lambda x:x["timestamp"]):
+              local=datetime.fromtimestamp(row["timestamp"],timezone.utc).astimezone(tallinn)
+              row["delivery_date"]=local.date().isoformat()
+              if local.date()==today: today_rows.append(row)
+              elif local.date()==tomorrow: tomorrow_rows.append(row)
+          output={"updated_at":datetime.now(timezone.utc).isoformat(),"today":today.isoformat(),"tomorrow":tomorrow.isoformat(),"today_prices":today_rows,"tomorrow_prices":tomorrow_rows,"today_count":len(today_rows),"tomorrow_count":len(tomorrow_rows)}
+          if len(today_rows)<92: raise RuntimeError(f"Today contains only {len(today_rows)} points")
+          Path("data/prices.json").write_text(json.dumps(output,ensure_ascii=False),encoding="utf-8")
+          Path("data/raw-prices.json").unlink()
+          print(f"Today: {len(today_rows)} points")
+          print(f"Tomorrow: {len(tomorrow_rows)} points")
+          PYCODE
+
+      - name: Commit electricity prices
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/prices.json
+          git diff --cached --quiet && exit 0
+          git commit -m "Update normalized electricity prices"
+          git push
