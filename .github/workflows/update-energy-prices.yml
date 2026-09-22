@@ -1,1 +1,104 @@
+name: Update energy prices
 
+on:
+  schedule:
+    - cron: "15 12 * * *"
+    - cron: "15 13 * * *"
+    - cron: "15 14 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-energy:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Update electricity and gas data
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p data
+          python3 - <<'PYCODE'
+          import html, json, re, time, urllib.request
+          from datetime import datetime, timedelta, timezone
+          from pathlib import Path
+          from zoneinfo import ZoneInfo
+
+          HEADERS={"Accept":"text/html,application/json","User-Agent":"Mozilla/5.0 EnergiaEE/6.0"}
+          def fetch(url):
+              req=urllib.request.Request(url,headers=HEADERS)
+              last=None
+              for _ in range(3):
+                  try:
+                      with urllib.request.urlopen(req,timeout=40) as r: return r.read().decode("utf-8","replace")
+                  except Exception as e: last=e; time.sleep(5)
+              raise last
+          def textify(s):
+              s=re.sub(r"<script[\\s\\S]*?</script>"," ",s,flags=re.I)
+              s=re.sub(r"<style[\\s\\S]*?</style>"," ",s,flags=re.I)
+              s=re.sub(r"<[^>]+>"," ",s)
+              return re.sub(r"\\s+"," ",html.unescape(s)).strip()
+
+          tz=ZoneInfo("Europe/Tallinn"); today=datetime.now(tz).date(); tomorrow=today+timedelta(days=1)
+          yesterday=today-timedelta(days=1); after=tomorrow+timedelta(days=1)
+          eurl=f"https://nordapi.ee/api/v1/elering/prices?start={yesterday}&end={after}"
+          eraw=json.loads(fetch(eurl)); node=eraw; source=[]
+          for _ in range(6):
+              if isinstance(node,dict) and isinstance(node.get("ee"),list): source=node["ee"]; break
+              node=node.get("data") if isinstance(node,dict) else None
+          unique={int(r["timestamp"]):{"timestamp":int(r["timestamp"]),"price":float(r["price"])} for r in source}
+          today_rows=[]; tomorrow_rows=[]
+          for row in sorted(unique.values(),key=lambda x:x["timestamp"]):
+              d=datetime.fromtimestamp(row["timestamp"],timezone.utc).astimezone(tz).date()
+              row["delivery_date"]=d.isoformat()
+              if d==today: today_rows.append(row)
+              elif d==tomorrow: tomorrow_rows.append(row)
+          if len(today_rows)<92: raise RuntimeError(f"Today contains only {len(today_rows)} points")
+          electric={"updated_at":datetime.now(timezone.utc).isoformat(),"today":today.isoformat(),"tomorrow":tomorrow.isoformat(),"today_prices":today_rows,"tomorrow_prices":tomorrow_rows,"today_count":len(today_rows),"tomorrow_count":len(tomorrow_rows)}
+          Path("data/prices.json").write_text(json.dumps(electric,ensure_ascii=False),encoding="utf-8")
+
+          old_gas={}
+          gp=Path("data/gas-prices.json")
+          if gp.exists():
+              try: old_gas=json.loads(gp.read_text(encoding="utf-8"))
+              except Exception: pass
+          conv=10.55
+          xy=textify(fetch("https://xydata.ee/gaas/"))
+          ttf_match=re.search(r"Gaasi hind täna\\s+([0-9]+(?:[.,][0-9]+)?)\\s*€/MWh",xy,re.I)
+          date_match=re.search(r"tänane \\((20[0-9]{2}-[0-9]{2}-[0-9]{2})\\)",xy,re.I)
+          if not ttf_match: ttf_match=re.search(r"Madalmaad \\(TTF\\)\\s+([0-9]+(?:[.,][0-9]+)?)\\s*€/MWh",xy,re.I)
+          ttf=float(ttf_match.group(1).replace(",",".")) if ttf_match else float(old_gas.get("ttf",{}).get("price_eur_mwh",0))
+          ttf_date=date_match.group(1) if date_match else old_gas.get("ttf",{}).get("date",today.isoformat())
+
+          el=textify(fetch("https://elenger.ee/kodukliendile/gaas-koju/gaasi-paindliku-paketi-hinna-ajalugu/"))
+          months="Jaanuar|Veebruar|Märts|Aprill|Mai|Juuni|Juuli|August|September|Oktoober|November|Detsember"
+          matches=re.findall(rf"({months})\\s+(20[0-9]{{2}})\\s+([0-9]+(?:[.,][0-9]+)?)\\s+([0-9]+(?:[.,][0-9]+)?)",el,re.I)
+          if matches:
+              month,year,fee,price=matches[0]; el_price=float(price.replace(",",".")); fee=float(fee.replace(",",".")); period=f"{month} {year}"
+          else:
+              prev=old_gas.get("elenger",{}); el_price=float(prev.get("price_eur_m3",0)); fee=float(prev.get("monthly_fee_eur",0)); period=prev.get("period","")
+          if ttf<=0 or el_price<=0: raise RuntimeError("Gas parser returned invalid price")
+          history=old_gas.get("history",[])
+          label=today.strftime("%m-%d")
+          item={"label":label,"date":today.isoformat(),"ttf_eur_mwh":ttf,"elenger_eur_mwh":el_price/conv*1000,"elenger_eur_m3":el_price}
+          history=[r for r in history if r.get("date")!=today.isoformat()]+[item]
+          history=history[-12:]
+          gas={"updated_at":datetime.now(timezone.utc).isoformat(),"conversion_kwh_m3":conv,"ttf":{"price_eur_mwh":ttf,"price_eur_m3":ttf/1000*conv,"date":ttf_date,"source":"xydata.ee"},"elenger":{"price_eur_m3":el_price,"price_eur_mwh":el_price/conv*1000,"period":period,"monthly_fee_eur":fee,"source":"elenger.ee"},"history":history}
+          gp.write_text(json.dumps(gas,ensure_ascii=False),encoding="utf-8")
+          print(f"Electric today {len(today_rows)}, tomorrow {len(tomorrow_rows)}")
+          print(f"TTF {ttf} €/MWh, Elenger {el_price} €/m3 ({period})")
+          PYCODE
+
+      - name: Commit updated data
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/prices.json data/gas-prices.json
+          git diff --cached --quiet && exit 0
+          git commit -m "Update electricity and gas prices"
+          git push
