@@ -1,0 +1,1 @@
+Asenda repository juurkaustas index.html selle failiga. Parandus arvutab Täna ja Homme Europe/Tallinn kuupäeva ning delivery_date järgi, valib aktiivse 15 minuti hinna ja lisab graafikule servadesse mahtuva hetkehinna sildi.
